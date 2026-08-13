@@ -18,6 +18,7 @@ from ..predictors import (
     available_predictors,
     get_predictor,
     predictor_status,
+    split_intents,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,9 @@ class PredictResponse(BaseModel):
     model: str
     intent: str
     confidence: float
+    intents: list[Candidate]  # 平等多意图：所有 ≥ 阈值的意图，各自独立置信度
+    sub_intent: str | None = None  # 兼容保留：intents[1]（若有）；无可选 None
+    sub_confidence: float | None = None
     top3: list[Candidate]
 
 
@@ -107,10 +111,18 @@ def predict(req: PredictRequest) -> PredictResponse:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     result = predictor.predict(req.text, top_k=3)
-    top1 = result[0]
+    intents = split_intents(result, PredictorConfig().multi_intent_threshold)
+    # 主输出 intents 是核心；以下字段为兼容保留
+    main = intents[0] if intents else result[0]
+    sub = intents[1] if len(intents) > 1 else None
     return PredictResponse(
         model=req.model,
-        intent=top1.intent,
-        confidence=top1.probability,
+        intent=main.intent,
+        confidence=main.probability,
+        intents=[
+            Candidate(intent=i.intent, probability=i.probability) for i in intents
+        ],
+        sub_intent=sub.intent if sub else None,
+        sub_confidence=sub.probability if sub else None,
         top3=[Candidate(intent=r.intent, probability=r.probability) for r in result],
     )

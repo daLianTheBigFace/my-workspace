@@ -36,6 +36,16 @@ class TfidfPredictor(BasePredictor):
         if list(self._labels) != list(LABELS):
             logger.warning("models/tfidf/labels.json 与 config.LABELS 不一致")
 
+        # 多标签模式检查：旧单标签产物缺 meta.json，不阻断，仅告警
+        meta_path = self._dir / "meta.json"
+        if not meta_path.exists():
+            logger.warning(
+                "models/tfidf/meta.json 缺失（旧单标签产物？）。"
+                "predict_proba 输出在旧头下不准确，建议用 train/tfidf.py 重训。"
+            )
+        elif json.loads(meta_path.read_text(encoding="utf-8")).get("mode") != "multi_label":
+            logger.warning("models/tfidf/meta.json mode 非 multi_label，建议重训")
+
     def predict(self, text: str, top_k: int = 3) -> list[Prediction]:
         X = self._vectorizer.transform([text])
         probs = self._classifier.predict_proba(X)[0]  # 类别顺序 = 训练时 labels.json

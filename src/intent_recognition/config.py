@@ -35,6 +35,9 @@ class DataConfig:
     raw_csv: Path = field(
         default_factory=lambda: PROJECT_ROOT / "assets" / "dataset" / "dataset.csv"
     )
+    multi_csv: Path = field(
+        default_factory=lambda: PROJECT_ROOT / "assets" / "dataset" / "dataset_multi.csv"
+    )
     stopwords: Path = field(
         default_factory=lambda: PROJECT_ROOT / "assets" / "dataset" / "baidu_stopwords.txt"
     )
@@ -80,3 +83,4 @@ class PredictorConfig:
     tfidf_dir: Path = field(
         default_factory=lambda: PROJECT_ROOT / "models" / "tfidf"
     )
+    multi_intent_threshold: float = 0.3  # 平等多意图判定阈值：sigmoid 概率 ≥ 此值即返回（重训后可微调）

@@ -42,6 +42,36 @@ class PredictorLoadError(RuntimeError):
     """方案存在但加载失败（模型缺失等）。"""
 
 
+def split_intents(
+    ranked: list[Prediction], threshold: float
+) -> list[Prediction]:
+    """平等多意图：返回所有概率 ≥ threshold 的意图，各自独立置信度，保持降序。
+
+    不分主次——一句话里每个满足阈值的意图都独立返回。
+    """
+    return [p for p in ranked if p.probability >= threshold]
+
+
+def split_main_sub(
+    ranked: list[Prediction], sub_threshold: float
+) -> tuple[Prediction, Prediction | None]:
+    """从按概率降序的候选里拆出主、次意图（旧版主次模式，向后兼容保留）。
+
+    - 主意图 = ranked[0]（概率最高）
+    - 次意图 = ranked[1]，且概率 ≥ sub_threshold，否则 None
+    - 兼容单标签模型（ranked 可能只有 1 条 → 次意图恒为 None）
+    """
+    if not ranked:
+        raise ValueError("ranked 不能为空")
+    main = ranked[0]
+    sub = (
+        ranked[1]
+        if len(ranked) > 1 and ranked[1].probability >= sub_threshold
+        else None
+    )
+    return main, sub
+
+
 def register_predictor(cls: type[BasePredictor]) -> type[BasePredictor]:
     """装饰器：把类按 cls.name 注册进 PREDICTORS。"""
     PREDICTORS[cls.name] = cls

@@ -33,6 +33,17 @@ class BertPredictor(BasePredictor):
         # 隐患(b)：final 缺 vocab.txt / special_tokens_map.json —— 优先 final，失败回退原始目录
         self._tokenizer = self._load_tokenizer(final, ModelConfig().pretrained_model)
 
+        # 多标签模式检查：predict 用 sigmoid；旧单标签产物（softmax 头）不阻断，仅告警
+        if (
+            getattr(self._model.config, "problem_type", "single_label_classification")
+            != "multi_label_classification"
+        ):
+            logger.warning(
+                "models/final 的 problem_type=%r，非 multi_label_classification。"
+                "多标签头需用 train/bert.py 重训；当前 sigmoid 输出在旧单标签头上不准确。",
+                self._model.config.problem_type,
+            )
+
         self._model.to(self._device).eval()
         logger.info("BertPredictor 加载完成，device=%s", self._device)
 
@@ -56,7 +67,8 @@ class BertPredictor(BasePredictor):
             max_length=ModelConfig().max_length,
         ).to(self._device)
         logits = self._model(**inputs).logits
-        probs = torch.softmax(logits, dim=-1)[0].float()
+        # 多标签头：sigmoid 独立激活（单标签 softmax 头在此数学上也成立，各概率独立不过量纲可跨类比较）
+        probs = torch.sigmoid(logits)[0].float()
         k = min(top_k, len(LABELS))
         values, indices = torch.topk(probs, k)
         return [

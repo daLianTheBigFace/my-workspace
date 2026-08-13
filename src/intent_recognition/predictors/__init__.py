@@ -15,6 +15,8 @@ from .base import (
     get_predictor,
     predictor_status,
     register_predictor,
+    split_intents,
+    split_main_sub,
 )
 from . import bert, tfidf  # noqa: F401  (注册副作用)
 
@@ -28,4 +30,6 @@ __all__ = [
     "get_predictor",
     "predictor_status",
     "register_predictor",
+    "split_intents",
+    "split_main_sub",
 ]

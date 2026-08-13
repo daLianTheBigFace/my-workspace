@@ -18,10 +18,27 @@ def _clean_instances():
 
 
 class FakePredictor(BasePredictor):
+    """返回主+次两条：weather 0.9（主）、music 0.6（次，≥ 阈值 0.3）。"""
+
     name = "fake"
 
     def predict(self, text: str, top_k: int = 3) -> list[Prediction]:
-        return [Prediction(intent="Weather-Query", probability=0.9)]
+        return [
+            Prediction(intent="Weather-Query", probability=0.9),
+            Prediction(intent="Music-Play", probability=0.6),
+        ]
+
+
+class FakePredictorLowSub(BasePredictor):
+    """次意图概率低于阈值 0.3 → sub 应返回 None。"""
+
+    name = "fake_low"
+
+    def predict(self, text: str, top_k: int = 3) -> list[Prediction]:
+        return [
+            Prediction(intent="Weather-Query", probability=0.9),
+            Prediction(intent="Music-Play", probability=0.2),
+        ]
 
 
 # 不进 with 上下文 → 不触发 lifespan，不拉 BERT 模型
@@ -68,7 +85,28 @@ def test_predict_with_fake_model(monkeypatch):
     assert body["model"] == "fake"
     assert body["intent"] == "Weather-Query"
     assert body["confidence"] == 0.9
-    assert len(body["top3"]) == 1
+    # 平等多意图：两个都 ≥ 阈值 0.3 → 都进 intents
+    assert [c["intent"] for c in body["intents"]] == ["Weather-Query", "Music-Play"]
+    assert [c["probability"] for c in body["intents"]] == [0.9, 0.6]
+    # 兼容字段：sub = intents[1]
+    assert body["sub_intent"] == "Music-Play"
+    assert body["sub_confidence"] == 0.6
+    assert len(body["top3"]) == 2
+
+
+def test_predict_sub_intent_none_below_threshold(monkeypatch):
+    """次意图概率 < 阈值 → 不进 intents，sub_intent 为 None。"""
+    monkeypatch.setitem(PREDICTORS, "fake_low", FakePredictorLowSub)
+    resp = client.post(
+        "/predict", json={"text": "今天天气怎么样", "model": "fake_low"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["intent"] == "Weather-Query"
+    # 只有 Weather 0.9 ≥ 0.3；Music 0.2 被过滤
+    assert [c["intent"] for c in body["intents"]] == ["Weather-Query"]
+    assert body["sub_intent"] is None
+    assert body["sub_confidence"] is None
 
 
 FINAL_DIR = PROJECT_ROOT / "models" / "final"

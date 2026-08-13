@@ -1,0 +1,31 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# IDE
+.idea/
+
+# Virtual environments
+.venv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 数据（体积大，不入库，保留目录结构）
+/data/raw/*
+/data/processed/*
+/data/splits/*
+!/data/**/.gitkeep
+
+# 训练产物（模型、日志、指标）
+/models/*
+!/models/.gitkeep
+/outputs/*
+!/outputs/.gitkeep
+
+# 本地 BERT 模型权重（约 400MB，不入库）
+/assets/models/

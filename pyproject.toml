@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "intent-recognition"
+version = "0.1.0"
+description = "可插拔多方案意图识别（BERT / TFIDF / LLM）推理服务"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "accelerate>=1.1.0",
+    "datasets>=5.0.1",
+    "fastapi>=0.115",
+    "scikit-learn>=1.9.0",
+    "torch>=2.13.0",
+    "transformers>=5.15.0",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+# 下载缓存放到 E 盘，避免占 C 盘空间
+cache-dir = 'E:\uv-cache'
+
+[tool.uv.sources]
+# 指定 torch 从 PyTorch 官方 CUDA 源解析，避免 uv 回落到 PyPI 的 CPU 版
+torch = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: 真实模型加载测试（需要已训练模型产物）",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/intent_recognition"]

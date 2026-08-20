@@ -13,6 +13,7 @@ dependencies = [
     "datasets>=5.0.1",
     "fastapi>=0.115",
     "scikit-learn>=1.9.0",
+    "sentence-transformers>=6.0.0",
     "torch>=2.13.0",
     "transformers>=5.15.0",
     "uvicorn[standard]>=0.30",
@@ -41,4 +42,4 @@ markers = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/intent_recognition"]
+packages = ["src/intent_recognition", "src/sentence_bert"]

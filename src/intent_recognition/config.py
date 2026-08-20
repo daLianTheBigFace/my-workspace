@@ -5,11 +5,17 @@
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 # src/my_workspace/config.py -> 项目根目录
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# 保险：HF 下载缓存固定到 E 盘项目内（默认会写 C 盘）。
+# 须在任何 transformers/huggingface import 之前生效。
+# 当前 bge 已直接下载进 assets/models，用不到缓存；留作以后下载其他模型时的兜底。
+os.environ.setdefault("HF_HOME", str(PROJECT_ROOT / "models" / ".hf_cache"))
 
 # 12 个意图类别（按字母序，作为 id2label 的固定顺序）
 LABELS = [

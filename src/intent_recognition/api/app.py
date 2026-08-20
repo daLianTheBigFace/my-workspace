@@ -11,6 +11,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from sentence_bert import match
+
 from ..config import PredictorConfig
 from ..predictors import (
     PredictorLoadError,
@@ -50,6 +52,20 @@ class PredictResponse(BaseModel):
     sub_intent: str | None = None  # 兼容保留：intents[1]（若有）；无可选 None
     sub_confidence: float | None = None
     top3: list[Candidate]
+
+
+class MatchRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="检索文本（一句话）")
+    candidates: list[str] = Field(
+        ..., min_length=1, description="候选文本列表（数据库里的句子）"
+    )
+
+
+class MatchResponse(BaseModel):
+    query: str
+    text: str  # 最相似的候选
+    index: int  # 在 candidates 中的位置
+    score: float  # 余弦相似度 0~1
 
 
 class HealthResponse(BaseModel):
@@ -125,4 +141,16 @@ def predict(req: PredictRequest) -> PredictResponse:
         sub_intent=sub.intent if sub else None,
         sub_confidence=sub.probability if sub else None,
         top3=[Candidate(intent=r.intent, probability=r.probability) for r in result],
+    )
+
+
+@app.post("/similarity", response_model=MatchResponse, tags=["推理"])
+def match_endpoint(req: MatchRequest) -> MatchResponse:
+    """从候选文本中找出与 query 最相似的一句。"""
+    result = match(req.query, req.candidates)
+    return MatchResponse(
+        query=req.query,
+        text=result.text,
+        index=result.index,
+        score=result.score,
     )

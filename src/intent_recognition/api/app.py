@@ -13,6 +13,12 @@ from pydantic import BaseModel, Field, field_validator
 
 from sentence_bert import match
 
+from rag_retrieval.api import router as rag_router
+from rag_retrieval.api import warm as warm_rag
+
+from es_search.api import router as es_router
+from es_search.api import warm as warm_es
+
 from ..config import PredictorConfig
 from ..predictors import (
     PredictorLoadError,
@@ -86,6 +92,11 @@ async def lifespan(_: FastAPI):
         get_predictor(cfg.default_model)  # 预热 bert，避免首个请求卡顿
     except Exception:
         logger.exception("默认方案 '%s' 预热失败", cfg.default_model)
+    try:
+        warm_rag()  # 预热 RAG 索引 + 召回器，避免首个 /search 卡顿
+    except Exception:
+        logger.exception("RAG 预热失败（索引未构建？）")
+    warm_es()  # ES 挂了只告警，不拖垮启动（内部已 try/except）
     yield
 
 
@@ -95,6 +106,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.include_router(rag_router)
+app.include_router(es_router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["系统"])

@@ -11,7 +11,13 @@ requires-python = ">=3.13"
 dependencies = [
     "accelerate>=1.1.0",
     "datasets>=5.0.1",
+    "elasticsearch>=8.17,<9",
     "fastapi>=0.115",
+    "jieba>=0.42.1",
+    "openai>=1.40.0",
+    "pdfplumber>=0.11.4",
+    "python-dotenv>=1.0.1",
+    "rank-bm25>=0.2.2",
     "scikit-learn>=1.9.0",
     "sentence-transformers>=6.0.0",
     "torch>=2.13.0",
@@ -42,4 +48,9 @@ markers = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/intent_recognition", "src/sentence_bert"]
+packages = [
+    "src/intent_recognition",
+    "src/sentence_bert",
+    "src/rag_retrieval",
+    "src/es_search",
+]

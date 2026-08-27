@@ -1,6 +1,14 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+.pytest_cache/
+.ruff_cache/
+
+# 锁文件不入库（每次 uv sync 重新解析）
+uv.lock
+
+# 本地密钥（含 API key，不入库）
+.env
 build/
 dist/
 wheels/
@@ -19,6 +27,7 @@ wheels/
 /data/raw/*
 /data/processed/*
 /data/splits/*
+/data/rag_index/*
 !/data/**/.gitkeep
 
 # 训练产物（模型、日志、指标）
@@ -29,3 +38,6 @@ wheels/
 
 # 本地 BERT 模型权重（约 400MB，不入库）
 /assets/models/
+
+# Week06 课程资源
+/assets/Week06/

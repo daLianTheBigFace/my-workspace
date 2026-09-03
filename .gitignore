@@ -28,6 +28,7 @@ wheels/
 /data/processed/*
 /data/splits/*
 /data/rag_index/*
+/data/pageindex/*
 !/data/**/.gitkeep
 
 # 训练产物（模型、日志、指标）

@@ -19,6 +19,9 @@ from rag_retrieval.api import warm as warm_rag
 from es_search.api import router as es_router
 from es_search.api import warm as warm_es
 
+from pageindex_svc.api import router as pageindex_router
+from pageindex_svc.api import warm as warm_pageindex
+
 from ..config import PredictorConfig
 from ..predictors import (
     PredictorLoadError,
@@ -97,6 +100,10 @@ async def lifespan(_: FastAPI):
     except Exception:
         logger.exception("RAG 预热失败（索引未构建？）")
     warm_es()  # ES 挂了只告警，不拖垮启动（内部已 try/except）
+    try:
+        warm_pageindex()  # 检查 pageindex 的 key/索引目录，缺了只告警
+    except Exception:
+        logger.exception("pageindex 预热失败")
     yield
 
 
@@ -109,6 +116,7 @@ app = FastAPI(
 
 app.include_router(rag_router)
 app.include_router(es_router)
+app.include_router(pageindex_router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["系统"])

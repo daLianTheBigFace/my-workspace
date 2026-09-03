@@ -15,6 +15,7 @@ dependencies = [
     "fastapi>=0.115",
     "jieba>=0.42.1",
     "openai>=1.40.0",
+    "pageindex>=0.2.8",
     "pdfplumber>=0.11.4",
     "python-dotenv>=1.0.1",
     "rank-bm25>=0.2.2",
@@ -32,6 +33,7 @@ cache-dir = 'E:\uv-cache'
 [tool.uv.sources]
 # 指定 torch 从 PyTorch 官方 CUDA 源解析，避免 uv 回落到 PyPI 的 CPU 版
 torch = { index = "pytorch-cu130" }
+pageindex = { git = "https://github.com/VectifyAI/PageIndex" }
 
 [[tool.uv.index]]
 name = "pytorch-cu130"
@@ -53,4 +55,5 @@ packages = [
     "src/sentence_bert",
     "src/rag_retrieval",
     "src/es_search",
+    "src/pageindex_svc",
 ]

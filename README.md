@@ -1,6 +1,6 @@
 # intent-recognition
 
-一个 FastAPI 推理服务，聚合四块能力（都是独立包，通过 `src/intent_recognition/api/app.py` 一个入口暴露）：
+一个 FastAPI 推理服务，聚合五块能力（都是独立包，通过 `src/intent_recognition/api/app.py` 一个入口暴露）：
 
 | 包 | 能力 | 接口 |
 |---|---|---|
@@ -8,6 +8,7 @@
 | `sentence_bert` | 句子相似度（bge 编码） | `/similarity` |
 | `rag_retrieval` | RAG 多路召回 + 重排（对齐 week06 页面级流程） | `/rag/search` `/rag/index_info` |
 | `es_search` | 基于本地 Elasticsearch 的全文 / 过滤 / 向量检索 | `/es/*` |
+| `pageindex_svc` | 文档检索（VectifyAI PageIndex 本地引擎：推理式无向量 RAG，DeepSeek） | `/pageindex/*` |
 
 ## 目录结构
 
@@ -25,17 +26,24 @@ my-workspace/
 │   │   ├── fusion.py         #   RRF 融合
 │   │   ├── rerank.py         #   bge-reranker 重排
 │   │   └── api/              #   /rag 路由
-│   └── es_search/            # 本地 ES 检索：全文 / 条件过滤 / 向量
-│       ├── queries.py        #   查询体构造（纯函数，可单测）
-│       ├── search.py         #   三大检索能力
-│       ├── build_index.py    #   灌数据建索引
-│       └── api/              #   /es 路由
+│   ├── es_search/            # 本地 ES 检索：全文 / 条件过滤 / 向量
+│   │   ├── queries.py        #   查询体构造（纯函数，可单测）
+│   │   ├── search.py         #   三大检索能力
+│   │   ├── build_index.py    #   灌数据建索引
+│   │   └── api/              #   /es 路由
+│   └── pageindex_svc/        # 文档检索：包装 VectifyAI PageIndex 本地引擎
+│       ├── config.py         #   模型/索引路径配置（DeepSeek，索引落 E 盘）
+│       ├── client.py         #   PageIndexLocalClient 惰性单例
+│       ├── service.py        #   建索引 / 列文档 / 取树 / 推理检索问答
+│       ├── api/              #   /pageindex 路由（router + warm）
+│       └── serve.py          #   独立起服务入口（uvicorn pageindex_svc.serve:app）
 ├── assets/                   # 资源（大文件不入库）
 │   ├── dataset/              #   原始数据 + 停用词
 │   ├── models/               #   本地模型（bge、bert，git 忽略）
 │   └── Week06/               #   课程文件（git 忽略）
 ├── data/
-│   └── rag_index/            # RAG/ES 复用：chunks.json + embeddings.npy（git 忽略）
+│   ├── rag_index/            # RAG/ES 复用：chunks.json + embeddings.npy（git 忽略）
+│   └── pageindex/            # PageIndex 本地索引（git 忽略）
 ├── models/                   # 训练产物（git 忽略）
 ├── tests/                    # 测试
 ├── pyproject.toml            # 依赖与构建配置（uv 管理）
@@ -158,6 +166,42 @@ PYTHONPATH=src uv run python -m es_search.build_index
 | `fuzzy` | 容错模糊（fuzziness=1，容忍错别字） | 「坐椅」错字 → 命中 187 条座椅内容 |
 
 > 注意：`fuzziness` 不能用 `AUTO`——它对 2 字符中文词只允许 0 次编辑（等于无容错），所以显式用 1。
+
+## pageindex 文档检索（/pageindex）
+
+包装 [VectifyAI/PageIndex](https://github.com/VectifyAI/PageIndex)（v0.2.10，依赖从 git 源装，见 `pyproject.toml` `[tool.uv.sources]`）的**本地引擎**——向量无关 / 推理式 RAG：先把 PDF 建成「目录树」索引，检索时模型对着精简树推理、再读命中的页回答。
+
+- **LLM**：建索引与检索都要模型。复用仓库 `.env` 的 DeepSeek（`deepseek/deepseek-chat`，litellm 写法），缺省回落 `RAG_LLM_API_KEY`。想换模型设 `PAGEINDEX_MODEL` / `PAGEINDEX_SUMMARY_MODEL`。
+- **本地包装包命名**：`pageindex_svc`（不用 `pageindex` 做顶层名，避免和 git 依赖 `pageindex` 同名冲突）。可并入主服务（本页开头那个入口已 include），也可独立起：`uv run uvicorn pageindex_svc.serve:app --port 8010`。
+- **索引落盘**：`data/pageindex/`（E 盘，git 忽略）。已建索引的文档可复用；列表/取树不需要 key，建索引/检索需要。
+
+接口：
+
+| 接口 | 说明 |
+|---|---|
+| `POST /pageindex/submit` | 提交 PDF 建索引。`mode=flash`（默认：本地版面抽结构 + LLM 写摘要，快）；`mode=standard`（全 LLM 建树，慢）。`pdf_path` 缺省用汽车手册。 |
+| `GET /pageindex/documents` | 已建索引列表 |
+| `GET /pageindex/documents/{doc_id}` | 文档元信息（页数/描述等） |
+| `GET /pageindex/documents/{doc_id}/tree` | 文档树结构（`?node_summary=1` 带摘要，`?include_text=1` 带整页文本） |
+| `POST /pageindex/query` | 推理式检索 + 问答。`with_process=true` 时返回检索过程（思考/工具调用/命中片段） |
+| `DELETE /pageindex/documents/{doc_id}` | 删除索引 |
+| `GET /pageindex/health` | key / 索引目录状态 |
+
+调用示例（汽车手册）：
+
+```bash
+# 建索引（DeepSeek 写节点摘要，354 页手册约几分钟；返回 doc_id）
+curl -X POST http://127.0.0.1:8000/pageindex/submit \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "flash"}'
+
+# 检索 + 问答，带过程
+curl -X POST http://127.0.0.1:8000/pageindex/query \
+  -H "Content-Type: application/json" \
+  -d '{"doc_id": "<上一步的 doc_id>", "query": "怎么打开空调？", "with_process": true}'
+```
+
+> 上游引擎仍是 alpha（v0.2.10）。已知坑：flash/standard 都要求**完整连贯文档**——从大 PDF 里截出的 3 页小样会抽不出结构或触发 TOC 页码 bug，请对整本手册用。
 
 ## week06 课程文件对照
 

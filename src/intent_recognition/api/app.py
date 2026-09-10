@@ -22,6 +22,9 @@ from es_search.api import warm as warm_es
 from pageindex_svc.api import router as pageindex_router
 from pageindex_svc.api import warm as warm_pageindex
 
+from deep_search.api import router as deep_search_router
+from deep_search.api import warm as warm_deep_search
+
 from ..config import PredictorConfig
 from ..predictors import (
     PredictorLoadError,
@@ -104,6 +107,10 @@ async def lifespan(_: FastAPI):
         warm_pageindex()  # 检查 pageindex 的 key/索引目录，缺了只告警
     except Exception:
         logger.exception("pageindex 预热失败")
+    try:
+        warm_deep_search()  # 检查 deep_search 的 key，缺了只告警
+    except Exception:
+        logger.exception("deep_search 预热失败")
     yield
 
 
@@ -117,6 +124,7 @@ app = FastAPI(
 app.include_router(rag_router)
 app.include_router(es_router)
 app.include_router(pageindex_router)
+app.include_router(deep_search_router)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["系统"])

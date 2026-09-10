@@ -37,6 +37,12 @@ wheels/
 /outputs/*
 !/outputs/.gitkeep
 
+# MCP 预测日志（hook 运行时生成，不入库）
+logs/
+
+# Claude Code 本地设置（个人权限/hook，不入库）
+.claude/settings.local.json
+
 # 本地 BERT 模型权重（约 400MB，不入库）
 /assets/models/
 

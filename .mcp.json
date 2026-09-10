@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "intent": {
+      "command": "E:/project/my-workspace/.venv/Scripts/python.exe",
+      "args": ["E:/project/my-workspace/mcp_servers/intent_server.py"]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # intent-recognition
 
-一个 FastAPI 推理服务，聚合五块能力（都是独立包，通过 `src/intent_recognition/api/app.py` 一个入口暴露）：
+一个 FastAPI 推理服务，聚合六块能力（都是独立包，通过 `src/intent_recognition/api/app.py` 一个入口暴露）：
 
 | 包 | 能力 | 接口 |
 |---|---|---|
@@ -9,6 +9,7 @@
 | `rag_retrieval` | RAG 多路召回 + 重排（对齐 week06 页面级流程） | `/rag/search` `/rag/index_info` |
 | `es_search` | 基于本地 Elasticsearch 的全文 / 过滤 / 向量检索 | `/es/*` |
 | `pageindex_svc` | 文档检索（VectifyAI PageIndex 本地引擎：推理式无向量 RAG，DeepSeek） | `/pageindex/*` |
+| `deep_search` | 深度搜索（Deep Research 智能体：拆解→联网+本地双 tool 检索→阅读→判官→迭代→合成，SSE 流式） | `/deep_search/search` `/deep_search/health` |
 
 ## 目录结构
 
@@ -31,12 +32,18 @@ my-workspace/
 │   │   ├── search.py         #   三大检索能力
 │   │   ├── build_index.py    #   灌数据建索引
 │   │   └── api/              #   /es 路由
-│   └── pageindex_svc/        # 文档检索：包装 VectifyAI PageIndex 本地引擎
-│       ├── config.py         #   模型/索引路径配置（DeepSeek，索引落 E 盘）
-│       ├── client.py         #   PageIndexLocalClient 惰性单例
-│       ├── service.py        #   建索引 / 列文档 / 取树 / 推理检索问答
-│       ├── api/              #   /pageindex 路由（router + warm）
-│       └── serve.py          #   独立起服务入口（uvicorn pageindex_svc.serve:app）
+│   ├── pageindex_svc/        # 文档检索：包装 VectifyAI PageIndex 本地引擎
+│   │   ├── config.py         #   模型/索引路径配置（DeepSeek，索引落 E 盘）
+│   │   ├── client.py         #   PageIndexLocalClient 惰性单例
+│   │   ├── service.py        #   建索引 / 列文档 / 取树 / 推理检索问答
+│   │   ├── api/              #   /pageindex 路由（router + warm）
+│   │   └── serve.py          #   独立起服务入口（uvicorn pageindex_svc.serve:app）
+│   └── deep_search/          # 深度搜索（Deep Research 智能体，LangGraph 编排）
+│       ├── graph.py          #   StateGraph 5 节点 + 条件回边（编排核心）
+│       ├── agents/           #   planner / judge / synthesizer（三个 LLM 角色）
+│       ├── tools/            #   web_search / local_search / reader（非 LLM 工具）
+│       ├── output.py         #   落盘 report.md + result.json
+│       └── api/              #   /deep_search 路由（SSE + warm）
 ├── assets/                   # 资源（大文件不入库）
 │   ├── dataset/              #   原始数据 + 停用词
 │   ├── models/               #   本地模型（bge、bert，git 忽略）
@@ -203,18 +210,24 @@ curl -X POST http://127.0.0.1:8000/pageindex/query \
 
 > 上游引擎仍是 alpha（v0.2.10）。已知坑：flash/standard 都要求**完整连贯文档**——从大 PDF 里截出的 3 页小样会抽不出结构或触发 TOC 页码 bug，请对整本手册用。
 
-## week06 课程文件对照
+## deep_search 深度搜索（/deep_search）
 
-课程文件在 `assets/Week06/`（git 忽略），全部无认证连本地 ES 8.x：
+Deep Research 智能体：把问题拆解 → 联网（Tavily）+ 本地手册**双 tool** 检索 → 抓取阅读 → 判官把关/补搜 → 迭代 → 合成带引用的答案，全程 SSE 流式输出，结束落盘报告与结构化结果。与前 5 个「一次检索出结果」的包不同，它是**多步自主**的搜索编排层。
 
-| 文件 | 演示 | 前置 |
-|---|---|---|
-| `04_ES测试.py` | 连接 ES + IK 分词（`_analyze`） | ES 运行中 |
-| `05_ES基础.py` | 客户端建索引、写入、中文搜索 | ES 运行中 |
-| `06_ES进阶.py` | multi_match + 多条件 filter | ES 运行中 |
-| `07_ES向量检索.py` | SentenceTransformer + knn 向量检索 | 建了 `assets/models/BAAI` junction |
+- **编排**：LangGraph `StateGraph`（5 节点 + 1 条条件回边）。
+- **判官两段式**：质量过滤（read 内逐篇判可信/相关）+ 充分性判断（reflect 节点，输出可搜索的补搜 query）；收敛三保险 = `max_rounds` 硬停 + 无新增停 + 判官自判够。
+- **LLM**：复用 `.env` 的 DeepSeek（`RAG_LLM_*` 回落 `DEEPSEEK_API_KEY`）；联网用 `TAVILY_API_KEY`，缺了只跑本地 tool。
+- **结果三层**：SSE 流式 answer → done 概览（sources/stats）→ 落盘 `outputs/deep_search/<ts>-<slug>/` 的 `report.md` + `result.json`（`save_files` 可关）。
 
-`07` 写死加载 `../models/BAAI/bge-small-zh-v1.5`，已用 junction 指向 `assets/models/bge-small-zh-v1.5`，无需改代码。
+```bash
+curl -N -X POST http://127.0.0.1:8000/deep_search/search \
+  -H "Content-Type: application/json" \
+  -d '{"question": "如何设置定速巡航？"}'
+```
+
+事件：`plan`（拆解）→ `search`（web/local）→ `read`（抓取）→ `reflect`（判官）→ `answer`（流式增量）→ `done`（概览 + 落盘路径）。
+
+> SSE 的 `EventSource` 只支持 GET，本接口用 POST 传 body，前端用 `fetch` + `ReadableStream` 手动拆帧。
 
 ## 多方案设计
 
